@@ -33,8 +33,8 @@ class EDMPrecond(nn.Module):
         #     dx, dpos = self.model(x_in, (c_in * pos), edge_index, None)
         #     F_x = dx
         #     F_pos = dpos
-        else: # Other models not supported
-            raise NotImplementedError
+        else:
+            raise NotImplementedError, ""
         
         # Noise dependent skip connection
         D_x = c_skip * x + c_out * F_x.astype(jnp.float32)
@@ -75,3 +75,68 @@ class EDMLoss(nn.Module):
         loss = jnp.mean(weight * error_x) + jnp.mean(weight * error_pos)
 
         return loss, (D_x, D_pos)
+
+
+def edm_sampler(
+    net,
+    pos_0,
+    x_0,
+    edge_index,
+    num_steps=18,
+    sigma_min=0.002,
+    sigma_max=80,
+    rho=7,
+    S_churn=20,
+    S_min=0,
+    S_max=jnp.inf,
+    S_noise=1,
+    return_intermediate=False,
+):
+    # Adjust noise levels based on what's supported by the network.
+    sigma_min = jnp.maximum(sigma_min, net.sigma_min)
+    sigma_max = jnp.minimum(sigma_max, net.sigma_max)
+
+    # Time step discretization.
+    step_indices = jnp.arange(num_steps, dtype=jnp.float32)
+    t_steps = (
+        sigma_max ** (1 / rho)
+        + step_indices
+        / (num_steps - 1)
+        * (sigma_min ** (1 / rho) - sigma_max ** (1 / rho))
+    ) ** rho
+    t_steps = jnp.concatenate(
+        [net.round_sigma(t_steps), jnp.zeros_like(t_steps[:1])]
+    )  # t_N = 0
+
+    # Main sampling loop.
+    x_next, pos_next = x_0 * t_steps[0], pos_0 * t_steps[0]
+    steps = [(x_next, pos_next)]
+    for i, (t_cur, t_next) in enumerate(zip(t_steps[:-1], t_steps[1:])):  # 0, ..., N-1
+        x_cur, pos_cur = x_next, pos_next
+
+        # Increase noise temporarily.
+        gamma = (jnp.minimum(S_churn / num_steps, jnp.sqrt(2) - 1) if S_min <= t_cur <= S_max else 0)
+        t_hat = net.round_sigma(t_cur + gamma * t_cur)
+        x_hat = x_cur + jnp.sqrt(t_hat**2 - t_cur**2) * S_noise * jax.random.normal(jax.random.PRNGKey(0), x_cur.shape)
+        pos_hat = pos_cur + jnp.sqrt(t_hat**2 - t_cur**2) * S_noise * jax.random.normal(jax.random.PRNGKey(0), pos_cur.shape)
+
+        # Euler step.
+        x_denoised, pos_denoised = net(x_hat, pos_hat, edge_index, t_hat)
+        dx_cur = (x_hat - x_denoised) / t_hat
+        dpos_cur = (pos_hat - pos_denoised) / t_hat
+        x_next = x_hat + (t_next - t_hat) * dx_cur
+        pos_next = pos_hat + (t_next - t_hat) * dpos_cur
+
+        # Apply 2nd order correction.
+        if i < num_steps - 1:
+            x_denoised, pos_denoised = net(x_next, pos_next, edge_index, t_next)
+            dx_prime = (x_next - x_denoised) / t_next
+            dpos_prime = (pos_next - pos_denoised) / t_next
+            x_next = x_hat + (t_next - t_hat) * (0.5 * dx_cur + 0.5 * dx_prime)
+            pos_next = pos_hat + (t_next - t_hat) * (0.5 * dpos_cur + 0.5 * dpos_prime)
+
+        steps.append((x_next, pos_next))
+
+    if return_intermediate:
+        return steps
+    return x_next, pos_next
