@@ -72,7 +72,7 @@ class GridGenerator(nn.Module):
             raise ValueError("Dimension must be either 1 (circle) or 2 (sphere).")
 
     def uniform_grid_s1(self):
-        theta = jnp.linspace(0, 2 * jnp.pi, self.n)[:-1]
+        theta = jnp.linspace(0, 2 * jnp.pi, self.n+1)[:-1]
         x = jnp.cos(theta)
         y = jnp.sin(theta)
         return jnp.stack([x, y], axis=-1)

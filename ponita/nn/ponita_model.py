@@ -137,7 +137,7 @@ class FullyConnectedPonita(nn.Module):
     def setup(self):
         # Create grid
         # TODO: make it a functional, this does not need to be a module/class
-        self.grid_generator = GridGenerator(self.num_ori, steps=1000)
+        self.grid_generator = GridGenerator(self.num_ori, dimension = 1, steps=1000)
         self.ori_grid = self.grid_generator()
 
         # Input output settings
@@ -168,12 +168,12 @@ class FullyConnectedPonita(nn.Module):
         self.read_out_layers = read_out_layers
 
         # Define initial mask
-        self._mask_default = jnp.zeros((1,1))
+        self._mask_default = jnp.ones((1,1))
 
             
     def __call__(self, x, pos, mask, batch):
         ori_grid = self.ori_grid.astype(pos.dtype)
-        edge_mask = mask[:,None,:] * mask[:,:,None]                                             # [B, M, N]
+        # edge_mask = mask[:,None,:] * mask[:,:,None]                                             # [B, M, N]
 
         # Compute the invariants
         rel_pos = pos[:,None,:,None,:] - pos[:,:,None,None,:]                                   # [B,M,N,1,3] 
@@ -196,7 +196,7 @@ class FullyConnectedPonita(nn.Module):
         kernel_basis = self.basis_fn(spatial_invariants)                              # [num_edges, num_ori, basis_dim]
         fiber_kernel_basis = self.fiber_basis_fn(orientation_invariants)              # [num_ori, num_ori, basis_dim]
         
-        # Initial feature embeding
+        # Initial feature embedding
         x = self.x_embedder(x)
         x = jnp.expand_dims(x, axis=-2).repeat(ori_grid.shape[-2], axis=-2)  # [B,N,O,C]
 
@@ -222,7 +222,11 @@ class FullyConnectedPonita(nn.Module):
 
         if self.global_pooling:
             mask = self._mask_default if mask is None else mask
-            output_scalar = jnp.sum(output_scalar * mask[:,:,None], axis=1) / jnp.sum(mask[:,:,None], axis=1)  # [B,C]
+            output_scalar_pooled = jnp.sum(output_scalar * mask[:,:,None], axis=1) / jnp.sum(mask[:,:,None], axis=1)  # [B,C]
+
+            # Divide by number of nodes
+            output_scalar = output_scalar_pooled / output_scalar.shape[1]
+
             if self.output_dim_vec > 0:
                 output_vector = jnp.sum(output_vector * mask[:,:,None,None], axis=1) / jnp.sum(mask[:,:,None,None], axis=1)  # [B,C,3]
                 # output_vector = (output_vector * mask[..., None, None]).sum(-1) / mask.sum(-1)[..., None, None]

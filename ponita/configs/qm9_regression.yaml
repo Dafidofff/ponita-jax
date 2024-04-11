@@ -5,19 +5,19 @@ logging:
   log_dir: './logs'
   log_every_n_steps: 50
   visualize_every_n_steps: 1000
-  checkpoint: True
+  checkpoint: False
   checkpoint_every_n_epochs: 25
   keep_n_checkpoints: 5
   no_progress_bar: False
-  debug: False
+  debug: True
 
 ponita:
-  hidden_dim: 128
-  num_ori: 16
-  basis_dim: 128
+  hidden_dim: 16
+  num_ori: 1
+  basis_dim: 16
   degree: 2
-  num_layers: 5
-  widening_factor: 4
+  num_layers: 3
+  widening_factor: 2
   layer_scale: 0
   radius: 1000.
   multiple_readouts: False
@@ -28,7 +28,7 @@ training:
   train_augmentation: True
   target: alpha
   num_epochs: 10000
-  batch_size: 64
+  batch_size: 16
   num_workers: 0
   model_checkpoint: True
   early_stopping: False
@@ -36,7 +36,7 @@ training:
 test:
   test_every_n_epochs: 1
   test_interval: 1
-  batch_size: 64
+  batch_size: 4
   min_num_epochs: 200
 
 optimizer:
