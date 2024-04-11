@@ -1,3 +1,4 @@
+from tqdm import tqdm
 from typing import Any, Callable
 from functools import partial
 
@@ -37,6 +38,7 @@ class QM9Trainer(BaseJaxTrainer):
         out_channels_vec = 0  # 
 
         # Transform
+        self.train_aug = config.training.train_augmentation
         self.rotation_generator = RandomSOd(3)
 
         # Model
@@ -67,7 +69,7 @@ class QM9Trainer(BaseJaxTrainer):
     def set_dataset_statistics(self, dataloader):
         print('Computing dataset statistics...')
         ys = []
-        for data in dataloader:
+        for data in tqdm(dataloader):
             ys.append(data['y'])
         ys = jnp.array(ys)
         # ys = np.concatenate(ys)
@@ -131,9 +133,12 @@ class QM9Trainer(BaseJaxTrainer):
             # Split random key
             rng, key = jax.random.split(state.rng)
 
-            # if self.train_augm:
-            #     rot = self.rotation_generator().type_as(batch['pos'])
-            #     batch['pos'] = jnp.einsum('ij, bj->bi', rot, batch['pos'])
+            if self.train_aug:
+                rot = self.rotation_generator()
+                if len(batch['pos'].shape) > 2:
+                    batch['pos'] = jnp.einsum('ij, bnj->bnj', rot, batch['pos'])
+                else:
+                    batch['pos'] = jnp.einsum('ij, bj->bi', rot, batch['pos'])
             
             # Define loss and calculate gradients
             def loss_fn(params):

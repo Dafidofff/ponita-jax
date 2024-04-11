@@ -1,3 +1,4 @@
+from tqdm import tqdm
 from typing import Any, Callable
 from functools import partial
 
@@ -30,10 +31,10 @@ class QM9Trainer(BaseJaxTrainer):
         super().__init__(config, train_loader, val_loader, seed)
 
         # set ponita model vars
-        self.in_channels_scalar = 5  # One-hot encoding molecules
-        in_channels_vec = 0  # 
-        out_channels_scalar = 1  # The target
-        out_channels_vec = 0  # 
+        self.in_channels_scalar = 5 + 1  # One-hot encoding molecules + sigma
+        in_channels_vec = 0
+        out_channels_scalar = 5
+        out_channels_vec = 1
 
         # Transform
         self.rotation_generator = RandomSOd(3)
@@ -66,7 +67,7 @@ class QM9Trainer(BaseJaxTrainer):
     def set_dataset_statistics(self, dataloader):
         print('Computing dataset statistics...')
         ys = []
-        for data in dataloader:
+        for data in tqdm(dataloader):
             ys.append(data['y'])
         ys = jnp.array(ys)
         # ys = np.concatenate(ys)

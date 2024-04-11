@@ -177,7 +177,7 @@ def collate_fn_fc(batch):
 
     batch_dict = {k: [d[k] for d in batch] for k in keys}
     for k in ['pos', 'x', 'z', 'mask', 'edge_adj', 'edge_attr', 'y']:
-        batch_dict[k] = jnp.stack(batch_dict[k], axis=0)
+        batch_dict[k] = np.stack(batch_dict[k], axis=0)
     batch_dict['edge_index'] = batch_dict['mask']
     return batch_dict
 

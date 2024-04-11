@@ -18,12 +18,6 @@ def train(config):
     #     config.logging.log_dir = hydra_cfg['runtime']['output_dir']
 
     # Define the datasets
-    # datasets = {split: QM9Dataset(split=split, target=config.training.target) for split in ['train', 'val', 'test']}
-    # dataloaders = {
-    #     split: DataLoader(dataset, batch_size=config.training.batch_size, shuffle=(split == 'train'), num_workers=config.training.num_workers, pin_memory=True, collate_fn=collate_fn)
-    #     for split, dataset in datasets.items()}
-
-    # Define the datasets
     if config.training.fully_connected:
         print('Using fully connected model')
         train_dataset = QM9DatasetFC(split='train', target=config.training.target)
