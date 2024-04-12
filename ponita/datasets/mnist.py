@@ -20,8 +20,8 @@ class MNISTPointCloud(Dataset):
     ):
         self.mnist = MNIST(root=root, train=True if split == 'train' else False, download=download)
 
-        self.mean = 4.4539332
-        self.std = 2.8892703
+        self.mean = 0.1307
+        self.std = 0.3081
 
         # Create grid of points for MNIST images
         self.pos = np.stack(np.meshgrid(np.linspace(-1, 1, 28), np.linspace(-1, 1, 28)), axis=-1).reshape(-1, 2)
@@ -30,12 +30,12 @@ class MNISTPointCloud(Dataset):
         return len(self.mnist)
 
     def __getitem__(self, idx):
-        # Create a point cloud from the image
+
         image, label = self.mnist[idx]
         pos = self.pos
-        image = np.array(image) / 255.0
+        image = np.array(image) / 255
         image = image.flatten()[..., np.newaxis]
-        # normalize
+        # normaliz
         image = (image - self.mean) / self.std
         # Create a dictionary with the point cloud and the label
         return {'pos': pos, 'x': image, 'y': label, 'mask': np.ones_like(image)}

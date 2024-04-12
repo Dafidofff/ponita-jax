@@ -11,6 +11,7 @@ from flax import linen as nn
 
 from ponita.trainers._base_trainer import BaseJaxTrainer
 from ponita.nn.ponita_model import Ponita, FullyConnectedPonita
+from ponita.nn.ponita_fc_fixedsize import PonitaFixedSize
 from ponita.utils.geometry.rotations import RandomSOd
 
 
@@ -43,22 +44,36 @@ class MNISTTrainer(BaseJaxTrainer):
         self.rotation_generator = RandomSOd(2)
 
         # Model
-        model_func = FullyConnectedPonita if config.training.fully_connected else Ponita
-        self.model = model_func(
-            input_dim         = self.in_channels_scalar + in_channels_vec,
-            hidden_dim        = config.ponita.hidden_dim,
-            output_dim        = out_channels_scalar,
-            num_layers        = config.ponita.num_layers,
-            output_dim_vec    = out_channels_vec,
-            radius            = config.ponita.radius,
-            num_ori           = config.ponita.num_ori,
-            basis_dim         = config.ponita.basis_dim,
-            degree            = config.ponita.degree,
-            widening_factor   = config.ponita.widening_factor,
-            layer_scale       = config.ponita.layer_scale,
-            task_level        = 'graph',
-            multiple_readouts = config.ponita.multiple_readouts,
-            batch_size        = config.training.batch_size
+        # model_func = FullyConnectedPonita
+        # self.model = model_func(
+        #     input_dim         = self.in_channels_scalar + in_channels_vec,
+        #     hidden_dim        = config.ponita.hidden_dim,
+        #     output_dim        = out_channels_scalar,
+        #     num_layers        = config.ponita.num_layers,
+        #     output_dim_vec    = out_channels_vec,
+        #     radius            = config.ponita.radius,
+        #     num_ori           = config.ponita.num_ori,
+        #     basis_dim         = config.ponita.basis_dim,
+        #     degree            = config.ponita.degree,
+        #     widening_factor   = config.ponita.widening_factor,
+        #     layer_scale       = config.ponita.layer_scale,
+        #     task_level        = 'graph',
+        #     multiple_readouts = config.ponita.multiple_readouts,
+        #     batch_size        = config.training.batch_size
+        # )
+
+        self.model = PonitaFixedSize(
+            num_in=self.in_channels_scalar + in_channels_vec,
+            num_hidden=config.ponita.hidden_dim,
+            num_layers=config.ponita.num_layers,
+            scalar_num_out=out_channels_scalar,
+            vec_num_out=out_channels_vec,
+            spatial_dim=2,
+            num_ori=config.ponita.num_ori,
+            basis_dim=config.ponita.basis_dim,
+            degree=config.ponita.degree,
+            widening_factor=config.ponita.widening_factor,
+            global_pool=True
         )
 
         self.shift = 0
@@ -96,11 +111,9 @@ class MNISTTrainer(BaseJaxTrainer):
         # Initialize model
         x = jnp.ones((4,28*28,1))
         pos = jnp.ones((4,28*28,2))
-        edge_index = None
-        batch = jnp.array([0, 1, 2, 3])
 
         # x, pos, edge_index, batch
-        model_params = self.model.init(model_key, x, pos, edge_index, batch)
+        model_params = self.model.init(model_key, pos, x)
 
         # Create train state
         train_state = SNeFTrainState(
@@ -137,11 +150,9 @@ class MNISTTrainer(BaseJaxTrainer):
             
             # Define loss and calculate gradients
             def loss_fn(params):
-                logits, _ = self.model.apply(params, batch['x'], batch['pos'], None, batch['batch'])
-                # one hot encoding of the target
-                label = jax.nn.one_hot(batch['y'], 10)
-
-                loss = jnp.mean(optax.softmax_cross_entropy(logits, label))
+                # logits, _ = self.model.apply(params, batch['x'], batch['pos'], None, batch['batch'])
+                logits, _ = self.model.apply(params, batch['pos'], batch['x'])
+                loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logits, batch['y']))
                 return loss
 
             loss, grads = jax.value_and_grad(loss_fn)(state.params)
