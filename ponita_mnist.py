@@ -4,11 +4,12 @@ import omegaconf
 import wandb
 from torch.utils.data import DataLoader
 
-from ponita.datasets.mnist import MNISTPointCloud, collate_fn as collate_fn_mnist
+# from ponita.datasets.mnist import MNISTPointCloud, collate_fn as collate_fn_mnist
+from ponita.datasets.mnist_superpixel import MNISTSuperPixelPointCloud, collate_fn as collate_fn_mnist
 from ponita.trainers.mnist_trainer import MNISTTrainer
 
 
-@hydra.main(version_base=None, config_path="./ponita/configs", config_name="qm9_regression")
+@hydra.main(version_base=None, config_path="./ponita/configs", config_name="mnist_classification")
 def train(config):
 
     # Set log dir
@@ -17,13 +18,10 @@ def train(config):
     #     config.logging.log_dir = hydra_cfg['runtime']['output_dir']
 
     # Define the datasets
-    if config.training.fully_connected:
-        print('Using fully connected model')
-        train_dataset = MNISTPointCloud(split='train')
-        val_dataset = MNISTPointCloud(split='val')
-        collate_fn = collate_fn_mnist
-    else:
-        raise ValueError("Gaan we niet doen he.")
+    print('Using fully connected model')
+    train_dataset = MNISTSuperPixelPointCloud(split='train')
+    val_dataset = MNISTSuperPixelPointCloud(split='val')
+    collate_fn = collate_fn_mnist
 
     # Define the dataloaders
     train_dataloader = DataLoader(train_dataset, batch_size=config.training.batch_size, shuffle=True, num_workers=config.training.num_workers, pin_memory=True, collate_fn=collate_fn, drop_last=True)
