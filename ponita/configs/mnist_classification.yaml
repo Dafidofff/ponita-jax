@@ -12,9 +12,9 @@ logging:
   debug: False
 
 ponita:
-  hidden_dim: 16
-  num_ori: 1
-  basis_dim: 16
+  hidden_dim: 64
+  num_ori: 4
+  basis_dim: 64
   degree: 2
   num_layers: 3
   widening_factor: 2
@@ -27,7 +27,7 @@ training:
   fully_connected: True
   train_augmentation: True
   num_epochs: 10000
-  batch_size: 8
+  batch_size: 16
   num_workers: 0
   model_checkpoint: True
   early_stopping: False
@@ -41,6 +41,6 @@ test:
 optimizer:
   seed: 42
   name: adamw
-  learning_rate: 1e-4
+  learning_rate: 1e-3
   clip_grad_norm: 0.5
   weight_decay: 0.0

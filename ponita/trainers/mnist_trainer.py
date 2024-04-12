@@ -138,17 +138,27 @@ class MNISTTrainer(BaseJaxTrainer):
             # Define loss and calculate gradients
             def loss_fn(params):
                 logits, _ = self.model.apply(params, batch['x'], batch['pos'], None, batch['batch'])
+                
                 # one hot encoding of the target
                 label = jax.nn.one_hot(batch['y'], 10)
-
                 loss = jnp.mean(optax.softmax_cross_entropy(logits, label))
-                return loss
+                return loss, logits
 
-            loss, grads = jax.value_and_grad(loss_fn)(state.params)
-
+            (loss, logits), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
+           
             # Update autodecoder
             updates, opt_state = self.optimizer.update(grads, state.opt_state)
             params = optax.apply_updates(state.params, updates)
+
+            # Calc accuracy
+            probs = jax.nn.softmax(logits, axis=-1)     
+            acc = jnp.mean(jnp.argmax(probs, axis=-1) == batch['y'])
+
+            # Metrics dict
+            metrics = {
+                'loss': loss,
+                'accuracy': acc,
+            }
 
             return loss, state.replace(
                 params=params,
@@ -159,7 +169,6 @@ class MNISTTrainer(BaseJaxTrainer):
         # Jit functions
         self.apply_nef_jitted = jax.jit(self.model.apply)
         self.train_step = jax.jit(step)
-        # self.train_step = step
         self.val_step = self.train_step
 
     def train_model(self, num_epochs, state=None):
@@ -190,6 +199,12 @@ class MNISTTrainer(BaseJaxTrainer):
             if epoch % self.config.test.test_interval == 0:
                 self.validate_epoch(state)
         return state
+    
+    def accuracy(self, params, batch):
+        logits, _ = self.model.apply(params, batch['x'], batch['pos'], None, batch['batch'])
+        probs = jax.nn.softmax(logits, axis=-1)
+        predictions = jnp.argmax(probs, axis=-1)
+        return jnp.mean(predictions == batch['y'])
 
     def train_epoch(self, state, epoch):
         # Loop over batches
@@ -201,6 +216,7 @@ class MNISTTrainer(BaseJaxTrainer):
 
             # Log every n steps
             if batch_idx % self.config.logging.log_every_n_steps == 0:
+                # wandb.log({'train_accuracy': acc})
                 wandb.log({'train_mse_step': loss})
                 self.update_prog_bar(loss, step=batch_idx)
 

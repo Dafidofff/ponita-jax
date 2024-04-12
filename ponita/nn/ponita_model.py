@@ -222,10 +222,10 @@ class FullyConnectedPonita(nn.Module):
 
         if self.global_pooling:
             mask = self._mask_default if mask is None else mask
-            output_scalar_pooled = jnp.sum(output_scalar * mask[:,:,None], axis=1) / jnp.sum(mask[:,:,None], axis=1)  # [B,C]
+            output_scalar = jnp.sum(output_scalar * mask[:,:,None], axis=1) / jnp.sum(mask[:,:,None], axis=1)  # [B,C]
 
             # Divide by number of nodes
-            output_scalar = output_scalar_pooled / output_scalar.shape[1]
+            # output_scalar = output_scalar_pooled / output_scalar.shape[1]
 
             if self.output_dim_vec > 0:
                 output_vector = jnp.sum(output_vector * mask[:,:,None,None], axis=1) / jnp.sum(mask[:,:,None,None], axis=1)  # [B,C,3]
