@@ -4,8 +4,8 @@ import omegaconf
 import wandb
 from torch.utils.data import DataLoader
 
-# from ponita.datasets.mnist import MNISTPointCloud, collate_fn as collate_fn_mnist
-from ponita.datasets.mnist_superpixel import MNISTSuperPixelPointCloud, collate_fn as collate_fn_mnist
+from ponita.datasets.mnist import MNISTPointCloud, collate_fn as collate_fn_mnist
+# from ponita.datasets.mnist_superpixel import MNISTSuperPixelPointCloud, collate_fn as collate_fn_mnist
 from ponita.trainers.mnist_trainer import MNISTTrainer
 
 
@@ -19,8 +19,8 @@ def train(config):
 
     # Define the datasets
     print('Using fully connected model')
-    train_dataset = MNISTSuperPixelPointCloud(split='train')
-    val_dataset = MNISTSuperPixelPointCloud(split='val')
+    train_dataset = MNISTPointCloud(split='train')
+    val_dataset = MNISTPointCloud(split='val')
     collate_fn = collate_fn_mnist
 
     # Define the dataloaders

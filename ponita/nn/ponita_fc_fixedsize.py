@@ -112,47 +112,6 @@ class PonitaFixedSize(nn.Module):
         # Readout layers
         self.readout = nn.Dense(self.scalar_num_out + self.vec_num_out)
 
-    @staticmethod
-    def invariants_2d(pos, ori):
-        """ Compute invariants for 2D positions.
-
-        Args:
-            pos: Array of shape (batch, num_points, 2)
-            ori: Array of shape (num_ori, 2)
-
-        Returns:
-            spatial_invariants: Array of shape (batch, num_points, num_points, num_ori, 2)
-            orientation_invariants: Array of shape (num_ori, num_ori, 1)
-        """
-        rel_pos = pos[:, None, :, None, :] - pos[:, :, None, None, :]  # (batch, num_points, num_points, 1, 2)
-
-        invariant1 = (rel_pos[..., 0] * ori[..., 0] + rel_pos[..., 1] * ori[..., 1])
-        invariant2 = (-rel_pos[..., 0] * ori[..., 1] + rel_pos[..., 1] * ori[..., 0])
-
-        spatial_invariants = jnp.stack([invariant1, invariant2], axis=-1)
-        orientation_invariants = (ori[:, None, :] * ori[None, :, :]).sum(axis=-1, keepdims=True)
-        return spatial_invariants, orientation_invariants
-
-    @staticmethod
-    def invariants_3d(pos, ori):
-        """ Compute invariants for 3D positions.
-
-        Args:
-            pos: Array of shape (batch, num_points, 3)
-            ori: Array of shape (num_ori, 3)
-
-        Returns:
-            spatial_invariants: Array of shape (batch, num_points, num_points, num_ori, 2)
-            orientation_invariants: Array of shape (num_ori, num_ori, 1)
-        """
-        rel_pos = pos[:, None, :, None, :] - pos[:, :, None, None, :]  # (batch, num_points, num_points, 1, 3)
-
-        invariant1 = (rel_pos * ori[None, None, None, :, :]).sum(axis=-1, keepdims=True)  # (batch, num_points, num_points, num_ori, 1)
-        invariant2 = (rel_pos - rel_pos * invariant1).norm(axis=-1, keepdims=True)  # (batch, num_points, num_points, 1, 3)
-        spatial_invariants = jnp.concatenate([invariant1, invariant2], axis=-1)
-        orientation_invariants = (ori[:, None, :] * ori[None, :, :]).sum(axis=-1, keepdims=True)
-        return spatial_invariants, orientation_invariants
-
     def __call__(self, pos, x):
         """ Forward pass through the network.
 
@@ -161,11 +120,18 @@ class PonitaFixedSize(nn.Module):
             x: Array of shape (batch, num_points, num_in)
         """
         # Get invariants, shape (batch, num_points, num_ori, num_points, num_ori, num_in)
-        spatial_invariants, rotation_invariants = self.invariants_2d(pos, self.ori_grid) if self.spatial_dim == 2 else self.invariants_3d(pos, self.ori_grid)
+        # spatial_invariants, rotation_invariants = self.invariants_2d(pos, self.ori_grid) if self.spatial_dim == 2 else self.invariants_3d(pos, self.ori_grid)
+
+        # Calculate invariants
+        rel_pos = pos[:, None, :, None, :] - pos[:, :, None, None, :]  # (batch, num_points, num_points, 1, 3)
+        invariant1 = (rel_pos * self.ori_grid[None, None, None, :, :]).sum(axis=-1, keepdims=True)  # (batch, num_points, num_points, num_ori, 1)
+        invariant2 = jnp.linalg.norm(rel_pos - rel_pos * invariant1, axis=-1, keepdims=True)  # (batch, num_points, num_points, 1, 3)
+        spatial_invariants = jnp.concatenate([invariant1, invariant2], axis=-1)
+        orientation_invariants = (self.ori_grid[:, None, :] * self.ori_grid[None, :, :]).sum(axis=-1, keepdims=True)
 
         # Sample the kernel basis
         kernel_basis = self.spatial_kernel_basis(spatial_invariants)
-        fiber_kernel_basis = self.rotation_kernel_basis(rotation_invariants)
+        fiber_kernel_basis = self.rotation_kernel_basis(orientation_invariants)
 
         # Initial feature embedding
         x = self.x_embedder(x)

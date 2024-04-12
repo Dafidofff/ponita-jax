@@ -1,7 +1,7 @@
 import numpy as np
 
 from torch.utils.data import Dataset
-from torch_geometric.datasets import MNISTSuperpixels
+# from torch_geometric.datasets import MNISTSuperpixels
 
 
 class MNISTSuperPixelPointCloud(Dataset):

@@ -12,11 +12,11 @@ logging:
   debug: False
 
 ponita:
-  hidden_dim: 64
-  num_ori: 4
-  basis_dim: 64
-  degree: 2
-  num_layers: 3
+  hidden_dim: 32
+  num_ori: 1
+  basis_dim: 32
+  degree: 3
+  num_layers: 1
   widening_factor: 2
   layer_scale: 0
   radius: 1000.
