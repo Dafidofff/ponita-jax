@@ -10,7 +10,7 @@ import jax.numpy as jnp
 from flax import struct, core
 
 from ponita.trainers._base_trainer import BaseJaxTrainer
-from ponita.nn.ponita_fc_fixedsize import FullyConnectedPonita
+from ponita.nn.ponita_fully_connected import FullyConnectedPonita
 from ponita.utils.geometry.rotations import RandomSOd
 
 

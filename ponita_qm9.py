@@ -7,7 +7,6 @@ from ponita.datasets.qm9_fc import  QM9DatasetFC, collate_fn_fc
 from ponita.trainers.qm9_trainer import QM9Trainer
 
 # import jax
-# jax.config.update("jax_debug_nans", True)
 # jax.config.update("jax_disable_jit", True)
 
 
