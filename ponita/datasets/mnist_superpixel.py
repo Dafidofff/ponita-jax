@@ -1,7 +1,7 @@
 import numpy as np
 
 from torch.utils.data import Dataset
-# from torch_geometric.datasets import MNISTSuperpixels
+from torch_geometric.datasets import MNISTSuperpixels
 
 
 class MNISTSuperPixelPointCloud(Dataset):
@@ -28,8 +28,7 @@ def collate_fn(batch):
     batch_dict = {k: [d[k] for d in batch] for k in keys}
     for k in ['pos', 'x', 'y']:
         batch_dict[k] = np.stack(batch_dict[k], axis=0)
-    batch_dict['edge_index'] = np.ones_like(batch_dict['x'])
-    batch_dict['batch'] = np.arange(len(batch_dict['x']))
+    batch_dict['y'] = batch_dict['y'].squeeze()
     return batch_dict
 
 ds = MNISTSuperPixelPointCloud()

@@ -10,8 +10,7 @@ from flax import struct, core
 from flax import linen as nn
 
 from ponita.trainers._base_trainer import BaseJaxTrainer
-from ponita.nn.ponita_model import Ponita, FullyConnectedPonita
-from ponita.nn.ponita_fc_fixedsize import PonitaFixedSize
+from ponita.nn.ponita_fc_fixedsize import FullyConnectedPonita
 from ponita.utils.geometry.rotations import RandomSOd
 
 
@@ -44,25 +43,7 @@ class MNISTTrainer(BaseJaxTrainer):
         self.rotation_generator = RandomSOd(2)
 
         # Model
-        # model_func = FullyConnectedPonita
-        # self.model = model_func(
-        #     input_dim         = self.in_channels_scalar + in_channels_vec,
-        #     hidden_dim        = config.ponita.hidden_dim,
-        #     output_dim        = out_channels_scalar,
-        #     num_layers        = config.ponita.num_layers,
-        #     output_dim_vec    = out_channels_vec,
-        #     radius            = config.ponita.radius,
-        #     num_ori           = config.ponita.num_ori,
-        #     basis_dim         = config.ponita.basis_dim,
-        #     degree            = config.ponita.degree,
-        #     widening_factor   = config.ponita.widening_factor,
-        #     layer_scale       = config.ponita.layer_scale,
-        #     task_level        = 'graph',
-        #     multiple_readouts = config.ponita.multiple_readouts,
-        #     batch_size        = config.training.batch_size
-        # )
-
-        self.model = PonitaFixedSize(
+        self.model = FullyConnectedPonita(
             num_in=self.in_channels_scalar + in_channels_vec,
             num_hidden=config.ponita.hidden_dim,
             num_layers=config.ponita.num_layers,
@@ -78,20 +59,6 @@ class MNISTTrainer(BaseJaxTrainer):
 
         self.shift = 0
         self.scale = 1
-
-        # Set dataset statistics
-        # self.set_dataset_statistics(train_loader)
-
-    def set_dataset_statistics(self, dataloader):
-        print('Computing dataset statistics...')
-        ys = []
-        for data in tqdm(dataloader):
-            ys.append(data['y'])
-        ys = jnp.array(ys)
-        # ys = np.concatenate(ys)
-        self.shift = jnp.mean(ys)
-        self.scale = jnp.std(ys)
-        print('Mean and std of target are:', self.shift, '-', self.scale)
 
     def init_train_state(self):
         """Initializes the training state.
@@ -109,8 +76,8 @@ class MNISTTrainer(BaseJaxTrainer):
         key, model_key = jax.random.split(key)
 
         # Initialize model
-        x = jnp.ones((4,28*28,1))
         pos = jnp.ones((4,28*28,2))
+        x = jnp.ones((4,28*28,1))
 
         # x, pos, edge_index, batch
         model_params = self.model.init(model_key, pos, x)
@@ -141,12 +108,10 @@ class MNISTTrainer(BaseJaxTrainer):
             # Split random key
             rng, key = jax.random.split(state.rng)
 
+            # Apply 2D rotation augmentation
             if self.train_aug:
                 rot = self.rotation_generator()
-                if len(batch['pos'].shape) > 2:
-                    batch['pos'] = jnp.einsum('ij, bnj->bnj', rot, batch['pos'])
-                else:
-                    batch['pos'] = jnp.einsum('ij, bj->bi', rot, batch['pos'])
+                batch['pos'] = jnp.einsum('ij, bj->bi', rot, batch['pos'])
             
             # Define loss and calculate gradients
             def loss_fn(params):
@@ -208,10 +173,11 @@ class MNISTTrainer(BaseJaxTrainer):
     def train_epoch(self, state, epoch):
         # Loop over batches
         losses = 0
-        accs = 0
+        accuracy = 0
         for batch_idx, batch in enumerate(self.train_loader):
  
             loss, acc, state = self.train_step(state, batch)
+            accuracy += acc
             losses += loss
 
             # Log every n steps
@@ -220,15 +186,12 @@ class MNISTTrainer(BaseJaxTrainer):
                 wandb.log({'train_mse_step': loss})
                 self.update_prog_bar(loss, step=batch_idx)
 
-            # if self.global_step % self.config.logging.visualize_every_n_steps == 0:
-            #     self.visualize_batch(state, batch, name='train/recon')
-
             # Increment global step
             self.global_step += 1
 
         # Update epoch loss
         self.train_mse_epoch = losses / len(self.train_loader)
-        self.train_acc_epoch = accs / len(self.train_loader)
+        self.train_acc_epoch = accuracy / len(self.train_loader)
         wandb.log({'train_accuracy_epoch': self.train_acc_epoch})
         wandb.log({'train_mse_epoch': self.train_mse_epoch})
         wandb.log({'epoch': epoch})
@@ -241,19 +204,22 @@ class MNISTTrainer(BaseJaxTrainer):
             state: The current training state.
         """
         # Loop over batches
-        losses = 0
+        losses, accuracy = 0, 0
         for batch_idx, batch in enumerate(self.val_loader):
-            loss, _ = self.val_step(state, batch)
+            loss, acc, _ = self.val_step(state, batch)
+            accuracy += acc
             losses += loss
 
             # Log every n steps
             if batch_idx % self.config.logging.log_every_n_steps == 0:
-                wandb.log({'val_mse_step': loss})
+                wandb.log({'val_mse_step': loss}, commit=False)
                 self.update_prog_bar(loss, step=batch_idx, train=False)
 
             # Increment global step
             self.global_val_step += 1
 
         # Update epoch loss
+        self.val_acc_epoch = accuracy / len(self.val_loader)
         self.val_mse_epoch = losses / len(self.val_loader)
+        wandb.log({'val_accuracy_epoch': self.val_acc_epoch}, commit=False)
         wandb.log({'val_mse_epoch': self.val_mse_epoch}, commit=False)

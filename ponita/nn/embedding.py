@@ -17,44 +17,6 @@ class PolynomialFeatures(nn.Module):
         return jnp.concatenate(polynomial_list, axis=-1)
 
 
-# class PolynomialFeatures(nn.Module):
-#     degree: int
-#     def setup(self):
-#         pass  # No setup needed as there are no trainable parameters.
-    
-#     # @jit
-#     def __call__(self, x):
-#         polynomial_list = [x]
-#         for it in range(2, self.degree+1):
-#             polynomial_list.append(jnp.einsum('...i,...j->...ij', polynomial_list[-1], x).reshape(x.shape[0], -1))
-#         return jnp.concatenate(polynomial_list, axis=-1)
-
-# @jit
-# def polynomial_embedding(x, degree=2):
-#     """
-#     Function to generate polynomial embeddings of the input vector x.
-    
-#     Parameters:
-#     - x: A 1-D JAX array of input features.
-#     - degree: The maximum degree of polynomial features.
-    
-#     Returns:
-#     - A 1-D JAX array containing the original and polynomial features up to the specified degree.
-#     """
-#     # Ensure x is a JAX array in case a list or a numpy array is passed
-#     x = jnp.array(x)
-    
-#     # Initialize the output with the original features
-#     output = x
-    
-#     # Generate polynomial features
-#     for d in range(2, degree + 1):
-#         # For each degree, compute the element-wise power and concatenate
-#         output = jnp.concatenate((output, jnp.power(x, d)), axis=0)
-    
-#     return output
-
-
 class RFFNet(nn.Module):
     output_dim: int
     hidden_dim: int

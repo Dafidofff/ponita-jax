@@ -1,3 +1,5 @@
+from typing import Optional
+
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -6,33 +8,10 @@ from ponita.nn.embedding import PolynomialFeatures
 from ponita.utils.geometry.rotations import GridGenerator
 
 
-class SepConvNextBlock(nn.Module):
+class FullyConnectedSeparableFiberBundleConv(nn.Module):
     num_hidden: int
     basis_dim: int
-    widening_factor: int = 4
-
-    def setup(self):
-        self.conv = SepConv(self.num_hidden, self.basis_dim)
-        self.act_fn = nn.gelu
-        self.linear_1 = nn.Dense(self.widening_factor * self.num_hidden)
-        self.linear_2 = nn.Dense(self.num_hidden)
-        self.norm = nn.LayerNorm()
-
-    def __call__(self, x, kernel_basis, fiber_kernel_basis):
-        input = x
-        x = self.conv(x, kernel_basis, fiber_kernel_basis)
-        x = self.norm(x)
-        x = self.linear_1(x)
-        x = self.act_fn(x)
-        x = self.linear_2(x)
-        x = x + input
-        return x
-
-
-class SepConv(nn.Module):
-    num_hidden: int
-    basis_dim: int
-    bias: bool = True
+    apply_bias: bool = True
 
     def setup(self):
         # Set up kernel coefficient layers, one for the spatial kernel and one for the group kernel.
@@ -41,10 +20,10 @@ class SepConv(nn.Module):
         self.rotation_kernel = nn.Dense(self.num_hidden, use_bias=False)
 
         # Construct bias
-        if self.bias:
-            self.bias_param = self.param('bias', nn.initializers.zeros, (self.num_hidden,))
+        if self.apply_bias:
+            self.bias = self.param('bias', nn.initializers.zeros, (self.num_hidden,))
 
-    def __call__(self, x, kernel_basis, fiber_kernel_basis):
+    def __call__(self, x, kernel_basis, fiber_kernel_basis, mask: Optional[jnp.ndarray] = None):
         """ Perform separable convolution on fully connected pointcloud.
 
         Args:
@@ -52,23 +31,52 @@ class SepConv(nn.Module):
             kernel_basis: Array of shape (batch, num_points, num_points, num_ori, basis_dim)
             fiber_kernel_basis: Array of shape (batch, num_points, num_points, basis_dim)
         """
+        # Create mask of ones if not provided
+        if mask is None:
+            mask = jnp.ones((x.shape[0], x.shape[1]))
+
         # Compute the spatial kernel
         spatial_kernel = self.spatial_kernel(kernel_basis)
 
-        # Compute the group kernel
+        # Compute the group kernel (Fiber kernel)
         rot_kernel = self.rotation_kernel(fiber_kernel_basis)
 
         # Perform the convolution
-        x = jnp.einsum('bnoc,bmnoc->bmoc', x, spatial_kernel)
-        x = jnp.einsum('bmoc,poc->bmpc', x, rot_kernel)
+        x = jnp.einsum('bnoc,bmnoc,bn->bmoc', x, spatial_kernel, mask)
+        x = jnp.einsum('bmoc,poc->bmpc', x, rot_kernel) / rot_kernel.shape[-2]
+
+        # TODO: Add calibration of the kernels.
 
         # Add bias
-        if self.bias:
-            x = x + self.bias_param
+        if self.apply_bias:
+            x = x + self.bias
         return x
 
 
-class PonitaFixedSize(nn.Module):
+class SeparableFiberBundleConvNext(nn.Module):
+    num_hidden: int
+    kernel_dim: int
+    widening_factor: int = 4
+
+    def setup(self):
+        self.conv = FullyConnectedSeparableFiberBundleConv(self.num_hidden, self.kernel_dim)
+        self.act_fn = nn.gelu
+        self.linear_1 = nn.Dense(self.widening_factor * self.num_hidden)
+        self.linear_2 = nn.Dense(self.num_hidden)
+        self.norm = nn.LayerNorm()
+
+    def __call__(self, x, kernel_basis, fiber_kernel_basis, mask: Optional[jnp.ndarray] = None):
+        input = x
+        x = self.conv(x, kernel_basis, fiber_kernel_basis, mask)
+        x = self.norm(x)
+        x = self.linear_1(x)
+        x = self.act_fn(x)
+        x = self.linear_2(x)
+        x = x + input
+        return x
+
+
+class FullyConnectedPonita(nn.Module):
     num_in: int
     num_hidden: int
     num_layers: int
@@ -87,7 +95,7 @@ class PonitaFixedSize(nn.Module):
 
         # Check input arguments
         assert self.spatial_dim in [2, 3], "spatial_dim must be 2 or 3."
-        rot_group_dim = 1 if self.spatial_dim == 2 else 3
+        rot_group_dim = 1 if self.spatial_dim == 2 else 2
 
         # Create a grid generator for the dimensionality of the orientation
         self.grid_generator = GridGenerator(n=self.num_ori, dimension=rot_group_dim, steps=1000)
@@ -106,21 +114,22 @@ class PonitaFixedSize(nn.Module):
         # Make feedforward network
         interaction_layers = []
         for i in range(self.num_layers):
-            interaction_layers.append(SepConvNextBlock(self.num_hidden, self.basis_dim))
+            interaction_layers.append(SeparableFiberBundleConvNext(self.num_hidden, self.basis_dim))
         self.interaction_layers = interaction_layers
 
         # Readout layers
         self.readout = nn.Dense(self.scalar_num_out + self.vec_num_out)
 
-    def __call__(self, pos, x):
+    def __call__(self, pos, x, mask: Optional[jnp.ndarray] = None):
         """ Forward pass through the network.
 
         Args:
             pos: Array of shape (batch, num_points, spatial_dim)
             x: Array of shape (batch, num_points, num_in)
+            mask: Array of shape (batch, num_points)
         """
-        # Get invariants, shape (batch, num_points, num_ori, num_points, num_ori, num_in)
-        # spatial_invariants, rotation_invariants = self.invariants_2d(pos, self.ori_grid) if self.spatial_dim == 2 else self.invariants_3d(pos, self.ori_grid)
+        if mask is None:
+            mask = jnp.ones((x.shape[0], x.shape[1]))
 
         # Calculate invariants
         rel_pos = pos[:, None, :, None, :] - pos[:, :, None, None, :]  # (batch, num_points, num_points, 1, 3)
@@ -141,13 +150,14 @@ class PonitaFixedSize(nn.Module):
 
         # Apply interaction layers
         for layer in self.interaction_layers:
-            x = layer(x, kernel_basis, fiber_kernel_basis)
+            x = layer(x, kernel_basis, fiber_kernel_basis, mask)
 
         # Readout layer
         readout = self.readout(x)
 
         # Split scalar and vector parts
-        readout_scalar, readout_vec = jnp.split(readout, [self.scalar_num_out], axis=-1)
+        # readout_scalar, readout_vec = jnp.split(readout, [self.scalar_num_out, self.vec_num_out], axis=-1)
+        readout_scalar, readout_vec = readout, None
 
         # Average over the orientation dimension
         output_scalar = readout_scalar.mean(axis=-2)
@@ -158,15 +168,15 @@ class PonitaFixedSize(nn.Module):
 
         # Global pooling
         if self.global_pool:
-            output_scalar = jnp.sum(output_scalar, axis=1) / output_scalar.shape[1]
+            output_scalar = jnp.sum(output_scalar * mask[:,:,None], axis=1) / jnp.sum(mask[:,:,None], axis=1) #output_scalar.shape[1]
             if self.vec_num_out > 0:
-                output_vector = jnp.sum(output_vector, axis=1) / output_vector.shape[1]
+                output_vector = jnp.sum(output_vector * mask[:,:,None,None], axis=1) / jnp.sum(mask[:,:,None,None], axis=1) #output_vector.shape[1]
 
         return output_scalar, output_vector
 
 
 if __name__ == "__main__":
-    model = PonitaFixedSize(
+    model = FullyConnectedPonita(
         num_in=3,
         num_hidden=64,
         num_layers=3,

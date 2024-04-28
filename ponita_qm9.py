@@ -1,34 +1,29 @@
-import argparse
 import hydra
 import omegaconf
 import wandb
 from torch.utils.data import DataLoader
 
-from ponita.datasets.qm9 import QM9Dataset, collate_fn as collate_fn_nfc
 from ponita.datasets.qm9_fc import  QM9DatasetFC, collate_fn_fc
 from ponita.trainers.qm9_trainer import QM9Trainer
+
+# import jax
+# jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_disable_jit", True)
 
 
 @hydra.main(version_base=None, config_path="./ponita/configs", config_name="qm9_regression")
 def train(config):
 
     # Set log dir
-    # if not config.logging.log_dir:
-    #     hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
-    #     config.logging.log_dir = hydra_cfg['runtime']['output_dir']
+    if not config.logging.log_dir:
+        hydra_cfg = hydra.core.hydra_config.HydraConfig.get()
+        config.logging.log_dir = hydra_cfg['runtime']['output_dir']
 
-    # Define the datasets
-    if config.training.fully_connected:
-        print('Using fully connected model')
-        train_dataset = QM9DatasetFC(split='train', target=config.training.target)
-        val_dataset = QM9DatasetFC(split='val', target=config.training.target)
-        test_dataset = QM9DatasetFC(split='test', target=config.training.target)
-        collate_fn = collate_fn_fc
-    else:
-        train_dataset = QM9Dataset(split='train', target=config.training.target)
-        val_dataset = QM9Dataset(split='val', target=config.training.target)
-        test_dataset = QM9Dataset(split='test', target=config.training.target)
-        collate_fn = collate_fn_nfc
+    # Create the fully connected dataset with node-masks i.o. edge-index
+    train_dataset = QM9DatasetFC(split='train', target=config.training.target)
+    val_dataset = QM9DatasetFC(split='val', target=config.training.target)
+    test_dataset = QM9DatasetFC(split='test', target=config.training.target)
+    collate_fn = collate_fn_fc
 
     # Define the dataloaders
     train_dataloader = DataLoader(train_dataset, batch_size=config.training.batch_size, shuffle=True, num_workers=config.training.num_workers, pin_memory=True, collate_fn=collate_fn, drop_last=True)
@@ -52,5 +47,4 @@ def train(config):
 
 
 if __name__ == "__main__":
-
     train()

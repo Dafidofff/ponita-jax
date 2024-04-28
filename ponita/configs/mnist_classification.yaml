@@ -12,9 +12,9 @@ logging:
   debug: False
 
 ponita:
-  hidden_dim: 32
-  num_ori: 1
-  basis_dim: 32
+  hidden_dim: 16
+  num_ori: 2
+  basis_dim: 16
   degree: 3
   num_layers: 1
   widening_factor: 2
@@ -27,7 +27,7 @@ training:
   fully_connected: True
   train_augmentation: True
   num_epochs: 10000
-  batch_size: 16
+  batch_size: 4
   num_workers: 0
   model_checkpoint: True
   early_stopping: False
