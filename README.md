@@ -142,13 +142,11 @@ As a baseline for super-pixel MNIST we take Probabilistic Numeric Convolutional 
 ## Conda environment
 In order to run the code in this repository install the following conda environment
 ```
-conda create --yes --name ponita python=3.10 numpy scipy matplotlib
-conda activate ponita
-conda install pytorch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1 pytorch-cuda=11.7 -c pytorch -c nvidia -y
-conda install pyg==2.3.1 -c pyg -y
+conda create --yes --name ponita-jax python=3.10 numpy matplotlib
+conda activate ponita-jax
+pip install -U "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+conda install pytorch torchvision torchaudio cpuonly -c pytorch
 pip3 install wandb
-pip3 install pytorch_lightning==1.8.6
-pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-1.13.1+cu117.html
 ```
 
 
